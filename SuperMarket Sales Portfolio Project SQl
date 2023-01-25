@@ -1,0 +1,113 @@
+----Inspecting Data
+select * from supermarket_sales
+
+
+----Checking unique values
+select distinct year(Date) from supermarket_sales 
+select distinct Product_line from  supermarket_sales  ---Nice to plot
+select distinct City from supermarket_sales  ---Nice to plot
+select distinct quantity from supermarket_sales  ---Nice to plot
+select distinct Customer_type from supermarket_sales ---Nice to plot
+
+---ANALYSIS
+----Let's start by grouping sales by productline
+select Product_line, sum(Total) Revenue
+from supermarket_sales
+group by Product_line
+order by 2 desc
+
+----Grouping sales by Payment Type
+select Payment, sum (Total) Revenue
+from supermarket_sales
+group by Payment
+order by 2 desc
+
+----Groupimg sales by Year
+select year(Date) Year, sum(Total) Revenue
+from supermarket_sales
+group by year(Date)
+order by 2 desc
+
+----Grouping sales by Quantity
+select  Quantity,  sum(Total) Revenue
+from supermarket_sales
+group by  Quantity
+order by 2 desc
+
+
+----What was the best month for sales in a specific year? How much was earned that month? 
+select month(Date) Month, sum(Total) Revenue, count(Invoice_ID) Frequency
+from supermarket_sales
+where year(Date) = '2019'
+group by  month(Date)
+order by 2 desc
+
+----September seems to be the month, what product do they sell in September, 
+select  month(Date) Month, Product_line, sum(Total) Revenue, count(Invoice_ID)
+from supermarket_sales
+where year(Date) = '2019' and month(Date) = '9' 
+group by  month(Date), Product_line
+order by 3 desc
+
+
+
+----Who is our best customer (this could be best answered with RFM)
+
+DROP TABLE IF EXISTS #rfm
+SELECT 
+    subquery.*,
+    case 
+        when rfm_recency = 1 and rfm_frequency = 1 and rfm_monetary = 1 then 'lost_customers'  
+        when rfm_recency = 1 and rfm_frequency = 1 and rfm_monetary = 2 then 'slipping away, cannot lose' 
+    
+    end rfm_segment
+FROM 
+    (
+        SELECT 
+    subquery.*,
+    @r_rank := IF(@r_prev = Recency, @r_rank, @r_rank + 1) AS r_rank,
+    @f_rank := IF(@f_prev = Frequency, @f_rank, @f_rank + 1) AS f_rank,
+    @m_rank := IF(@m_prev = MonetaryValue, @m_rank, @m_rank + 1) AS m_rank,
+    CEIL(@r_rank / (count(subquery.Invoice_ID) / 4)) AS rfm_recency,
+    CEIL(@f_rank / (count(subquery.Invoice_ID) / 4)) AS rfm_frequency,
+    CEIL(@m_rank / (count(subquery.Invoice_ID) / 4)) AS rfm_monetary,
+    @r_prev := Recency,
+    @f_prev := Frequency,
+    @m_prev := MonetaryValue
+FROM 
+    (
+        SELECT 
+            Invoice_ID, 
+            SUM(Total) MonetaryValue,
+            AVG(Total) AvgMonetaryValue,
+            COUNT(Invoice_ID) Frequency,
+            MAX(Date) last_order_date,
+            (SELECT MAX(Date) FROM supermarket_sales) max_order_date,
+            DATEDIFF(max(Date), (SELECT MAX(Date) FROM supermarket_sales)) Recency
+        FROM 
+            supermarket_sales
+        GROUP BY 
+            Invoice_ID
+    ) subquery,
+    (SELECT @r_rank := 0, @f_rank := 0, @m_rank := 0, @r_prev := NULL, @f_prev := NULL, @m_prev := NULL) vars
+GROUP BY 
+    subquery.Invoice_ID
+   
+
+    ) subquery
+
+---EXTRAs----
+--What city has the highest number of sales 
+select City, sum (Total) Revenue
+from supermarket_sales
+group by city
+order by 2 desc
+
+
+
+---What is the best product?
+select City, year(Date) Year, Product_line, sum(Total) Revenue
+from supermarket_sales
+group by  City, year(Date), Product_line
+order by 4 desc    
+
